@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mineral & Rock Master</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Mitr:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <!-- Tone.js for Sound Effects -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden; /* ป้องกัน Scroll */
+            font-family: 'Mitr', sans-serif;
+            background-color: #1a202c;
+            touch-action: none; /* ป้องกันการซูมด้วยนิ้วบนมือถือ */
+        }
+        #webcam {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            z-index: 1;
+            transform: scaleX(-1); /* กลับด้านวิดีโอเป็นกระจก */
+        }
+        #game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 5;
+        }
+        .glass-panel {
+            background: rgba(17, 24, 39, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none; /* ให้คลิกทะลุไปหา Canvas ได้ */
+        }
+        .interactive-ui {
+            pointer-events: auto; /* เปิดให้คลิก UI ได้ */
+        }
+    </style>
+</head>
+<body>
+
+    <!-- วิดีโอพื้นหลัง -->
+    <video id="webcam" autoplay playsinline></video>
+    
+    <!-- Canvas สำหรับวาดเกม -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- UI: หน้าจอโหลดเกม -->
+    <div id="loading-screen" class="ui-layer interactive-ui flex items-center justify-center bg-gray-900 z-50">
+        <div class="text-center">
+            <div class="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <h2 class="text-2xl font-bold text-white">กำลังเตรียมความพร้อม...</h2>
+            <p class="text-gray-400 mt-2" id="loading-text">โหลดข้อมูลและกล้อง</p>
+        </div>
+    </div>
+
+    <!-- UI: หน้าจอเริ่มต้น -->
+    <div id="start-screen" class="ui-layer interactive-ui flex items-center justify-center hidden">
+        <div class="glass-panel p-8 rounded-3xl max-w-xl text-center">
+            <h1 class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-500 mb-4 tracking-tight">
+                Mineral & Rock Master
+            </h1>
+            <p class="text-xl text-white mb-6">ภารกิจพิชิตขุมทรัพย์หินและแร่</p>
+            <p class="text-gray-300 mb-8">
+                ใช้มือของคุณ(ผ่านกล้อง) หรือ เมาส์ ในการลากหินและแร่<br>ไปวางให้ตรงกับประโยชน์การใช้งานในชีวิตประจำวัน!
+            </p>
+            <button onclick="showKnowledgeScreen()" class="px-8 py-4 bg-gradient-to-r from-blue-600 to-teal-500 hover:from-blue-500 hover:to-teal-400 text-white font-bold rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 text-xl">
+                เริ่มภารกิจ!
+            </button>
+        </div>
+    </div>
+
+    <!-- UI: ใบความรู้ก่อนเริ่มเกม -->
+    <div id="knowledge-screen" class="ui-layer interactive-ui flex items-center justify-center hidden bg-black/80 z-40">
+        <div class="glass-panel p-8 rounded-3xl max-w-3xl w-[90%] max-h-[90vh] overflow-y-auto text-white relative">
+            <h2 class="text-3xl font-bold text-teal-400 mb-6 text-center">📚 ใบความรู้: หินและแร่รอบตัวเรา</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                <div>
+                    <h3 class="text-xl font-bold text-blue-300 mb-2">🪨 หมวดหมู่: หิน</h3>
+                    <ul class="list-disc pl-5 space-y-2">
+                        <li><b>หินแกรนิต:</b> แข็งแรงทนทาน นิยมใช้ปูพื้น ปูโต๊ะ หรือทำป้ายอาคาร</li>
+                        <li><b>หินปูน:</b> นำมาบดและเผาเพื่อผลิตปูนซีเมนต์สำหรับงานก่อสร้าง</li>
+                        <li><b>หินอ่อน:</b> ลวดลายสวยงาม ใช้ในงานแกะสลักหรือตกแต่งอาคาร</li>
+                        <li><b>หินออบซิเดียน:</b> เนื้อคล้ายแก้ว แตกแล้วคมกริบ ในอดีตใช้ทำอาวุธ ปัจจุบันใช้ทำมีดผ่าตัดหรือเครื่องประดับ</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-yellow-300 mb-2">💎 หมวดหมู่: แร่</h3>
+                    <ul class="list-disc pl-5 space-y-2">
+                        <li><b>แร่ควอตซ์:</b> ทนรอยขีดข่วน ใช้ทำกระจก เลนส์ และชิ้นส่วนนาฬิกา</li>
+                        <li><b>แร่กราไฟต์:</b> อ่อนและลื่น ใช้ทำไส้ดินสอและสารหล่อลื่น</li>
+                        <li><b>แร่ยิปซัม:</b> นำมาทำแผ่นฝ้าเพดาน แผ่นกั้นห้อง และปูนพลาสเตอร์</li>
+                        <li><b>แร่ทองคำ:</b> นำไฟฟ้าดีเยี่ยม ไม่เป็นสนิม ใช้ทำแผงวงจรอิเล็กทรอนิกส์และเครื่องประดับ</li>
+                        <li><b>เพชร:</b> แข็งที่สุด ใช้ทำเครื่องประดับและหัวเจาะ/หัวตัดกระจก</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="mt-8 text-center">
+                <button onclick="closeKnowledgeAndStart()" class="px-8 py-3 bg-teal-500 hover:bg-teal-400 text-white font-bold rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 text-lg">
+                    เข้าใจแล้ว เข้าสู่เกม!
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- UI: HUD ระหว่างเล่น -->
+    <div id="hud" class="ui-layer hidden pointer-events-none p-4 flex justify-between items-start">
+        <div class="glass-panel px-6 py-3 rounded-2xl">
+            <p class="text-gray-300 text-sm font-semibold">ด่านที่ <span id="ui-level" class="text-white text-lg">1</span></p>
+            <h3 id="ui-level-name" class="text-teal-400 font-bold text-xl">หินในชีวิตประจำวัน</h3>
+        </div>
+        <div class="flex gap-4">
+            <div class="glass-panel px-6 py-3 rounded-2xl text-center">
+                <p class="text-gray-300 text-sm font-semibold">คะแนน</p>
+                <p id="ui-score" class="text-yellow-400 font-bold text-2xl">0</p>
+            </div>
+            <div class="glass-panel px-6 py-3 rounded-2xl text-center">
+                <p class="text-gray-300 text-sm font-semibold">เวลา</p>
+                <p id="ui-time" class="text-white font-bold text-2xl">00:00</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- UI: สรุปความรู้ท้ายด่าน -->
+    <div id="level-summary-screen" class="ui-layer interactive-ui flex items-center justify-center hidden bg-black/60 z-30">
+        <div class="glass-panel p-8 rounded-3xl max-w-2xl text-center text-white">
+            <h2 class="text-4xl font-bold text-yellow-400 mb-2">ผ่านด่านแล้ว!</h2>
+            <p class="text-lg text-gray-200 mb-6" id="summary-title">เยี่ยมมาก คุณจับคู่ได้ถูกต้องทั้งหมด</p>
+            
+            <div class="bg-gray-800/50 p-4 rounded-xl mb-6 text-left" id="summary-content">
+                <!-- เนื้อหาจะถูกแทรกด้วย JS -->
+            </div>
+
+            <button onclick="nextLevel()" class="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-full shadow-lg transform transition hover:scale-105 text-xl">
+                ด่านต่อไป ➡️
+            </button>
+        </div>
+    </div>
+
+    <!-- UI: จบเกม -->
+    <div id="victory-screen" class="ui-layer interactive-ui flex items-center justify-center hidden bg-black/80 z-40">
+        <div class="glass-panel p-10 rounded-3xl max-w-xl text-center text-white">
+            <h1 class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-200 mb-4">
+                🎉 Mission Complete!
+            </h1>
+            <p class="text-2xl text-teal-300 mb-6">คุณคือปรมาจารย์ด้านหินและแร่</p>
+            
+            <div class="grid grid-cols-2 gap-4 mb-8 text-left">
+                <div class="bg-gray-800/60 p-4 rounded-xl">
+                    <p class="text-gray-400 text-sm">คะแนนรวม</p>
+                    <p class="text-3xl font-bold text-yellow-400" id="final-score">0</p>
+                </div>
+                <div class="bg-gray-800/60 p-4 rounded-xl">
+                    <p class="text-gray-400 text-sm">เวลาที่ใช้</p>
+                    <p class="text-3xl font-bold text-white" id="final-time">00:00</p>
+                </div>
+            </div>
+
+            <button onclick="resetGame()" class="px-8 py-4 bg-teal-500 hover:bg-teal-400 text-white font-bold rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 text-xl w-full">
+                เล่นอีกครั้ง 🔄
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // ---------------------------------------------
+        // ระบบภาพและโหลด Resource ล่วงหน้า (Preload)
+        // ---------------------------------------------
+        const imageUrls = {
+            'ทัลก์': 'https://lh3.googleusercontent.com/d/1UmZKwwBysGjiSZ1TZrRDRy4ADo2nLwB1',
+            'เพชร': 'https://lh3.googleusercontent.com/d/107qV7nQRlUfUQPlijN-KWis0zH4kxG3N',
+            'ฟลูออไรต์': 'https://lh3.googleusercontent.com/d/1ELMmqK700oyDBkuVkh-0R9EMcQ41--xH',
+            'แร่กราไฟต์': 'https://lh3.googleusercontent.com/d/1DQ6OAGkKuc-Xy4rplXzc5jJJZxgAMUbc',
+            'แร่ควอตซ์': 'https://lh3.googleusercontent.com/d/1Yf-okZA-XE7R0fGe6ngVhSkGAKcY_Ep4',
+            'แร่ทองคำ': 'https://lh3.googleusercontent.com/d/17IagggXuTwvIA3DKYOXCdxLzAm5kCenp',
+            'แร่ยิปซัม': 'https://lh3.googleusercontent.com/d/1plKSSLtAdxxnmmda8_iY-7f7ESpz1TGA',
+            'หินแกรนิต': 'https://lh3.googleusercontent.com/d/17c9VVoIdJEjtJ7IM6nTQzlDf0QwAuJQJ',
+            'หินทราย': 'https://lh3.googleusercontent.com/d/1cKxHXz_K61-pJQyu16wXG_fVwZrxbdUd',
+            'หินปูน': 'https://lh3.googleusercontent.com/d/1qflakdwsT9LopCDZX3KFWnr9pNKWuDfK',
+            'หินศิลาแลง': 'https://lh3.googleusercontent.com/d/1LtVVBo-EeNz6irqssFmCV3V_NCj9MxWi',
+            'หินอ่อน': 'https://lh3.googleusercontent.com/d/1pXudH7HMXsBD7vTv9zKNQeJAmm5MhN7j',
+            'หินออบซิเดียน': 'https://lh3.googleusercontent.com/d/1JvPB0CvOlzStEYw8F7nN-bD4xoaGTzae'
+        };
+
+        const imageCache = {};
+
+        async function preloadImages() {
+            const promises = Object.keys(imageUrls).map(key => {
+                return new Promise((resolve) => {
+                    const img = new Image();
+                    img.crossOrigin = "anonymous";
+                    img.src = imageUrls[key];
+                    img.onload = () => {
+                        imageCache[key] = img;
+                        resolve();
+                    };
+                    img.onerror = () => {
+                        console.error("Failed to load image:", imageUrls[key]);
+                        resolve(); // Resolve แม้ว่าภาพจะโหลดพังเพื่อไม่ให้เกมค้าง
+                    };
+                });
+            });
+            await Promise.all(promises);
+        }
+
+        // ---------------------------------------------
+        // ระบบเสียง (Tone.js)
+        // ---------------------------------------------
+        let sfx = {};
+        let toneStarted = false;
+
+        async function initAudio() {
+            if (toneStarted) return;
+            try {
+                await Tone.start();
+                toneStarted = true;
+
+                const mainSynth = new Tone.PolySynth(Tone.Synth).toDestination();
+                mainSynth.volume.value = -8;
+
+                const errorSynth = new Tone.Synth({
+                    oscillator: { type: "sawtooth" },
+                    envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.2 }
+                }).toDestination();
+                errorSynth.volume.value = -12;
+
+                const popSynth = new Tone.MembraneSynth().toDestination();
+                popSynth.volume.value = -10;
+
+                sfx = {
+                    click: () => mainSynth.triggerAttackRelease("C6", "32n"),
+                    grab: () => popSynth.triggerAttackRelease("G4", "16n"),
+                    correct: () => {
+                        const now = Tone.now();
+                        mainSynth.triggerAttackRelease("C5", "8n", now);
+                        mainSynth.triggerAttackRelease("E5", "8n", now + 0.1);
+                        mainSynth.triggerAttackRelease("G5", "4n", now + 0.2);
+                    },
+                    wrong: () => errorSynth.triggerAttackRelease("C3", "8n"),
+                    levelClear: () => {
+                        const now = Tone.now();
+                        mainSynth.triggerAttackRelease(["C5", "E5", "G5"], "4n", now);
+                        mainSynth.triggerAttackRelease(["F5", "A5", "C6"], "4n", now + 0.2);
+                        mainSynth.triggerAttackRelease(["G5", "B5", "D6"], "4n", now + 0.4);
+                        mainSynth.triggerAttackRelease(["C6", "E6", "G6"], "2n", now + 0.6);
+                    },
+                    victory: () => {
+                        const now = Tone.now();
+                        mainSynth.triggerAttackRelease(["C5", "E5", "G5", "C6"], "2n", now);
+                        mainSynth.triggerAttackRelease(["F5", "A5", "C6", "F6"], "2n", now + 0.5);
+                        mainSynth.triggerAttackRelease(["C5", "E5", "G5", "C6"], "1n", now + 1.0);
+                    }
+                };
+            } catch(e) {
+                console.warn("Tone.js could not start", e);
+            }
+        }
+
+        const gameLevels = [
+            {
+                title: "หินในชีวิตประจำวัน",
+                items: [
+                    { id: "granite", name: "หินแกรนิต", imgKey: "หินแกรนิต", matchId: "target_granite" },
+                    { id: "limestone", name: "หินปูน", imgKey: "หินปูน", matchId: "target_limestone" },
+                    { id: "marble", name: "หินอ่อน", imgKey: "หินอ่อน", matchId: "target_marble" },
+                    { id: "obsidian", name: "หินออบซิเดียน", imgKey: "หินออบซิเดียน", matchId: "target_obsidian" }
+                ],
+                targets: [
+                    { id: "target_granite", label: "ปูพื้นอาคาร / ปูโต๊ะ\n(แข็งแรง ทนทาน สวยงาม)" },
+                    { id: "target_limestone", label: "ผลิตปูนซีเมนต์\n(งานก่อสร้าง)" },
+                    { id: "target_marble", label: "งานแกะสลัก / ตกแต่ง\n(ลวดลายสวย เนื้ออ่อนกว่า)" },
+                    { id: "target_obsidian", label: "มีดผ่าตัด / เครื่องประดับ\n(แตกแล้วคมกริบ)" }
+                ],
+                summary: [
+                    "<b>หินแกรนิต</b> แข็งแรงมาก จึงเหมาะกับงานที่ต้องรับน้ำหนักหรือแรงขีดข่วน",
+                    "<b>หินปูน</b> มีแคลเซียมคาร์บอเนต เป็นวัตถุดิบหลักในการทำปูนซีเมนต์",
+                    "<b>หินอ่อน</b> แปรสภาพมาจากหินปูน มีลวดลายสวยงาม ขัดมันได้",
+                    "<b>หินออบซิเดียน</b> เกิดจากลาวาเย็นตัวเร็วมากจนตกผลึกไม่ทัน มีความคมระดับมีดผ่าตัด"
+                ]
+            },
+            {
+                title: "แร่มหาอัศจรรย์",
+                items: [
+                    { id: "quartz", name: "แร่ควอตซ์", imgKey: "แร่ควอตซ์", matchId: "target_quartz" },
+                    { id: "graphite", name: "แร่กราไฟต์", imgKey: "แร่กราไฟต์", matchId: "target_graphite" },
+                    { id: "gypsum", name: "แร่ยิปซัม", imgKey: "แร่ยิปซัม", matchId: "target_gypsum" },
+                    { id: "gold", name: "แร่ทองคำ", imgKey: "แร่ทองคำ", matchId: "target_gold" },
+                    { id: "diamond", name: "เพชร", imgKey: "เพชร", matchId: "target_diamond" }
+                ],
+                targets: [
+                    { id: "target_quartz", label: "ทำกระจก / เลนส์ / นาฬิกา" },
+                    { id: "target_graphite", label: "ไส้ดินสอ / สารหล่อลื่น" },
+                    { id: "target_gypsum", label: "แผ่นฝ้าเพดาน / ปูนพลาสเตอร์" },
+                    { id: "target_gold", label: "แผงวงจรอิเล็กทรอนิกส์" },
+                    { id: "target_diamond", label: "เครื่องประดับ / หัวตัดกระจก" }
+                ],
+                summary: [
+                    "<b>แร่ควอตซ์</b> มีความแข็ง ทนทาน นำมาหลอมทำกระจกหรือแก้วได้",
+                    "<b>แร่กราไฟต์</b> เนื้ออ่อน หลุดลอกเป็นแผ่นได้ง่าย จึงใช้เขียนได้",
+                    "<b>แร่ยิปซัม</b> เมื่อนำไปเผาและบด จะกลายเป็นปูนพลาสเตอร์ที่ขึ้นรูปได้",
+                    "<b>แร่ทองคำ</b> นำไฟฟ้าได้ดีมากและไม่เป็นสนิม จึงสำคัญต่อแผงวงจรชิ้นเล็กๆ",
+                    "<b>เพชร</b> คือแร่ที่แข็งที่สุดในโลก จึงใช้ตัดหินหรือกระจกได้สบาย"
+                ]
+            },
+            {
+                title: "ห้องแล็บวิเคราะห์ (หินและแร่)",
+                items: [
+                    { id: "talc", name: "แร่ทัลก์", imgKey: "ทัลก์", matchId: "target_talc" },
+                    { id: "sandstone", name: "หินทราย", imgKey: "หินทราย", matchId: "target_sandstone" },
+                    { id: "laterite", name: "หินศิลาแลง", imgKey: "หินศิลาแลง", matchId: "target_laterite" },
+                    { id: "fluorite", name: "แร่ฟลูออไรต์", imgKey: "ฟลูออไรต์", matchId: "target_fluorite" }
+                ],
+                targets: [
+                    { id: "target_talc", label: "แป้งฝุ่น / เครื่องสำอาง\n(อ่อนนุ่มที่สุด)" },
+                    { id: "target_sandstone", label: "หินลับมีด / แกะสลัก\n(เนื้อสาก ทนทาน)" },
+                    { id: "target_laterite", label: "ทำกำแพง / จัดสวน\n(สีแดงอิฐ รูพรุน)" },
+                    { id: "target_fluorite", label: "เลนส์กล้อง / ยาสีฟัน\n(สกัดสารฟลูออรีน)" }
+                ],
+                summary: [
+                    "<b>แร่ทัลก์ (Talc)</b> เป็นแร่ที่มีความแข็งน้อยที่สุดในโลก นำมาบดทำแป้งฝุ่นทาตัวและส่วนผสมเครื่องสำอางได้ดี",
+                    "<b>หินทราย</b> ประกอบด้วยเม็ดทรายที่เกาะติดกัน ทำให้มีผิวสาก นิยมนำมาทำหินลับมีด หรือใช้ในงานแกะสลัก",
+                    "<b>หินศิลาแลง</b> มีสีแดงจากสนิมเหล็กและมีรูพรุน เมื่อขุดขึ้นมาใหม่ๆ จะอ่อนตัว แต่เมื่อโดนอากาศจะแข็งตัวมาก นิยมใช้ทำกำแพง",
+                    "<b>แร่ฟลูออไรต์</b> นำมาสกัดเป็นฟลูออรีนผสมในยาสีฟันป้องกันฟันผุ และใช้ทำเลนส์ออพติคอลคุณภาพสูง"
+                ]
+            }
+        ];
+
+        let state = {
+            status: 'LOADING', // LOADING, START_MENU, PLAYING, LEVEL_TRANSITION, GAMEOVER
+            currentLevel: 0,
+            score: 0,
+            combo: 0,
+            timeSeconds: 0,
+            timerInterval: null,
+            width: window.innerWidth,
+            height: window.innerHeight,
+            pointer: { x: 0, y: 0, isGrabbing: false, source: 'none' }, // source: 'mouse', 'touch', 'hand'
+            activeObjects: [], // หิน/แร่ ที่ลากได้
+            targetZones: [], // กล่องปลายทาง
+            grabbedObject: null,
+            particles: [],
+            handLandmarks: null // เก็บจุดโครงสร้างมือสำหรับวาด
+        };
+
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const videoElement = document.getElementById('webcam');
+
+        // ฟังก์ชันสุ่มลำดับใน Array (Fisher-Yates Shuffle)
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            state.width = canvas.width;
+            state.height = canvas.height;
+            if (state.status === 'PLAYING') {
+                calculateLayout();
+            }
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function calculateLayout() {
+            const data = gameLevels[state.currentLevel];
+            const isMobile = state.width < 768;
+            
+            // วาง Target Zones (กล่องรับ) ไว้ด้านบน/กลาง
+            const targetRows = isMobile ? Math.ceil(data.targets.length / 2) : 2;
+            const targetCols = isMobile ? 2 : Math.ceil(data.targets.length / 2);
+            const boxWidth = isMobile ? state.width * 0.4 : Math.min(300, state.width * 0.25);
+            const boxHeight = 100;
+            const startY = state.height * 0.15;
+            const startX = (state.width - (targetCols * boxWidth + (targetCols - 1) * 20)) / 2;
+
+            // ถ้ายังไม่มีเป้าหมาย (เริ่มด่านใหม่) ให้ทำการดึงข้อมูลมาและสุ่มตำแหน่ง
+            if (state.targetZones.length === 0) {
+                let shuffledTargets = [...data.targets];
+                shuffleArray(shuffledTargets);
+                shuffledTargets.forEach(t => {
+                    state.targetZones.push({
+                        id: t.id,
+                        label: t.label,
+                        isFilled: false
+                    });
+                });
+            }
+
+            // อัปเดตพิกัดเป้าหมาย (รองรับการย่อ/ขยายจอ)
+            state.targetZones.forEach((zone, i) => {
+                const row = Math.floor(i / targetCols);
+                const col = i % targetCols;
+                zone.x = startX + col * (boxWidth + 20);
+                zone.y = startY + row * (boxHeight + 20);
+                zone.width = boxWidth;
+                zone.height = boxHeight;
+            });
+
+            // วาง หิน/แร่ ไว้ด้านล่าง
+            const itemRadius = isMobile ? 40 : 50;
+            const itemStartY = state.height - itemRadius * 2 - (isMobile ? 20 : 60);
+            const totalItemWidth = data.items.length * (itemRadius * 2.5);
+            const itemStartX = (state.width - totalItemWidth) / 2 + itemRadius;
+
+            // ถ้ายังไม่มีหิน/แร่ (เริ่มด่านใหม่) ให้ทำการดึงข้อมูลมาและสุ่มตำแหน่ง
+            if (state.activeObjects.length === 0) {
+                let shuffledItems = [...data.items];
+                shuffleArray(shuffledItems);
+                shuffledItems.forEach(item => {
+                    state.activeObjects.push({
+                        id: item.id,
+                        name: item.name,
+                        imgKey: item.imgKey,
+                        matchId: item.matchId,
+                        isMatched: false
+                    });
+                });
+            }
+
+            // อัปเดตพิกัดหิน/แร่ (รองรับการย่อ/ขยายจอ)
+            state.activeObjects.forEach((obj, i) => {
+                obj.radius = itemRadius;
+                obj.startX = itemStartX + i * (itemRadius * 2.5);
+                obj.startY = itemStartY;
+                
+                // ถ้ายึดติดแล้วให้อยู่กึ่งกลางกล่องเป้าหมายเสมอ
+                if (obj.isMatched) {
+                    const targetHit = state.targetZones.find(z => z.id === obj.matchId);
+                    if (targetHit) {
+                        obj.x = targetHit.x + targetHit.width / 2;
+                        obj.y = targetHit.y + targetHit.height / 2;
+                    }
+                } 
+                // แต่ถ้ายังไม่ติด และไม่ได้ถูกจับอยู่ ให้กลับไปที่จุดเริ่มต้นที่คำนวณใหม่
+                else if (state.grabbedObject !== obj) {
+                    obj.x = obj.startX;
+                    obj.y = obj.startY;
+                }
+            });
+        }
+
+        async function showKnowledgeScreen() {
+            await initAudio(); // เปิดระบบเสียงเมื่อผู้เล่นคลิกครั้งแรก
+            if (sfx.click) sfx.click();
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('knowledge-screen').classList.remove('hidden');
+        }
+
+        function closeKnowledgeAndStart() {
+            if (sfx.click) sfx.click();
+            document.getElementById('knowledge-screen').classList.add('hidden');
+            startGame();
+        }
+
+        function startGame() {
+            state.score = 0;
+            state.timeSeconds = 0;
+            state.currentLevel = 0;
+            
+            document.getElementById('hud').classList.remove('hidden');
+            startLevel(0);
+
+            // เริ่มนับเวลา
+            clearInterval(state.timerInterval);
+            state.timerInterval = setInterval(() => {
+                state.timeSeconds++;
+                updateHUD();
+            }, 1000);
+        }
+
+        function startLevel(levelIndex) {
+            state.currentLevel = levelIndex;
+            state.status = 'PLAYING';
+            state.grabbedObject = null;
+            state.pointer.isGrabbing = false;
+            
+            // เคลียร์ตำแหน่งเก่าทั้งหมด เพื่อให้ระบบทำการสุ่มตำแหน่งใหม่สำหรับด่านนี้
+            state.activeObjects = [];
+            state.targetZones = [];
+            
+            calculateLayout();
+            updateHUD();
+        }
+
+        function updateHUD() {
+            document.getElementById('ui-level').innerText = state.currentLevel + 1;
+            document.getElementById('ui-level-name').innerText = gameLevels[state.currentLevel].title;
+            document.getElementById('ui-score').innerText = state.score;
+            
+            const m = Math.floor(state.timeSeconds / 60).toString().padStart(2, '0');
+            const s = (state.timeSeconds % 60).toString().padStart(2, '0');
+            document.getElementById('ui-time').innerText = `${m}:${s}`;
+        }
+
+        function addScore(points) {
+            state.combo++;
+            let comboBonus = state.combo > 1 ? (state.combo * 10) : 0;
+            state.score += (points + comboBonus);
+            updateHUD();
+        }
+
+        function handleInteraction() {
+            if (state.status !== 'PLAYING') return;
+
+            if (state.pointer.isGrabbing && !state.grabbedObject) {
+                // พยายามหยิบหิน
+                for (let i = state.activeObjects.length - 1; i >= 0; i--) {
+                    let obj = state.activeObjects[i];
+                    if (!obj.isMatched) {
+                        let dx = state.pointer.x - obj.x;
+                        let dy = state.pointer.y - obj.y;
+                        let dist = Math.sqrt(dx*dx + dy*dy);
+                        if (dist < obj.radius + 20) {
+                            state.grabbedObject = obj;
+                            // ย้ายไปหลังสุดของ Array เพื่อให้วาดทับอันอื่น
+                            state.activeObjects.push(state.activeObjects.splice(i, 1)[0]);
+                            if (sfx.grab) sfx.grab();
+                            break;
+                        }
+                    }
+                }
+            } else if (state.pointer.isGrabbing && state.grabbedObject) {
+                // กำลังลาก
+                state.grabbedObject.x = state.pointer.x;
+                state.grabbedObject.y = state.pointer.y;
+            } else if (!state.pointer.isGrabbing && state.grabbedObject) {
+                // ปล่อยมือ (Drop)
+                let obj = state.grabbedObject;
+                state.grabbedObject = null;
+                
+                // ตรวจสอบการชนกับกล่องเป้าหมาย (Bounding Box Collision)
+                let targetHit = null;
+                for (let zone of state.targetZones) {
+                    if (!zone.isFilled && 
+                        obj.x > zone.x && obj.x < zone.x + zone.width &&
+                        obj.y > zone.y && obj.y < zone.y + zone.height) {
+                        targetHit = zone;
+                        break;
+                    }
+                }
+
+                if (targetHit) {
+                    // เช็คว่าตรงคู่หรือไม่
+                    if (obj.matchId === targetHit.id) {
+                        if (sfx.correct) sfx.correct();
+                        obj.isMatched = true;
+                        targetHit.isFilled = true;
+                        // ล็อคตำแหน่งให้อยู่ตรงกลางกล่อง
+                        obj.x = targetHit.x + targetHit.width / 2;
+                        obj.y = targetHit.y + targetHit.height / 2;
+                        
+                        addScore(100);
+                        createParticles(obj.x, obj.y, '#4ade80'); // เอฟเฟกต์สีเขียว
+                        checkLevelComplete();
+                    } else {
+                        if (sfx.wrong) sfx.wrong();
+                        state.combo = 0;
+                        updateHUD();
+                        createParticles(obj.x, obj.y, '#ef4444'); // เอฟเฟกต์สีแดง
+                        // เด้งกลับจุดเดิม
+                        obj.x = obj.startX;
+                        obj.y = obj.startY;
+                    }
+                } else {
+                    // ปล่อยทิ้งนอกกล่อง ให้เด้งกลับ
+                    obj.x = obj.startX;
+                    obj.y = obj.startY;
+                }
+            }
+        }
+
+        function checkLevelComplete() {
+            const allFilled = state.activeObjects.every(obj => obj.isMatched);
+            
+            if (allFilled) {
+                state.status = 'LEVEL_TRANSITION';
+                if (sfx.levelClear) sfx.levelClear();
+                createParticles(state.width/2, state.height/2, '#fbbf24', 50);
+                
+                setTimeout(() => {
+                    showLevelSummary();
+                }, 1500);
+            }
+        }
+
+        function showLevelSummary() {
+            const summaryData = gameLevels[state.currentLevel].summary;
+            let htmlStr = `<ul class="list-disc pl-5 space-y-2">`;
+            summaryData.forEach(text => {
+                htmlStr += `<li>${text}</li>`;
+            });
+            htmlStr += `</ul>`;
+
+            document.getElementById('summary-content').innerHTML = htmlStr;
+            document.getElementById('level-summary-screen').classList.remove('hidden');
+        }
+
+        function nextLevel() {
+            if (sfx.click) sfx.click();
+            document.getElementById('level-summary-screen').classList.add('hidden');
+            
+            if (state.currentLevel + 1 < gameLevels.length) {
+                startLevel(state.currentLevel + 1);
+            } else {
+                endGame();
+            }
+        }
+
+        function endGame() {
+            state.status = 'GAMEOVER';
+            clearInterval(state.timerInterval);
+            
+            if (sfx.victory) sfx.victory();
+
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('final-score').innerText = state.score;
+            document.getElementById('final-time').innerText = document.getElementById('ui-time').innerText;
+            document.getElementById('victory-screen').classList.remove('hidden');
+            
+            triggerConfetti();
+        }
+
+        function resetGame() {
+            if (sfx.click) sfx.click();
+            document.getElementById('victory-screen').classList.add('hidden');
+            startGame();
+        }
+
+        function createParticles(x, y, color, count = 15) {
+            for (let i = 0; i < count; i++) {
+                state.particles.push({
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    life: 1.0,
+                    color: color
+                });
+            }
+        }
+
+        function triggerConfetti() {
+            for (let i = 0; i < 100; i++) {
+                state.particles.push({
+                    x: state.width / 2,
+                    y: state.height,
+                    vx: (Math.random() - 0.5) * 20,
+                    vy: -(Math.random() * 15 + 10),
+                    life: 1.0,
+                    color: ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'][Math.floor(Math.random() * 5)]
+                });
+            }
+        }
+
+        function updateParticles() {
+            for (let i = state.particles.length - 1; i >= 0; i--) {
+                let p = state.particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.02; // ค่อยๆ จางหายไป
+                
+                if (state.status === 'GAMEOVER') p.vy += 0.2; // แรงโน้มถ่วงสำหรับ Confetti
+
+                if (p.life <= 0) {
+                    state.particles.splice(i, 1);
+                }
+            }
+        }
+
+        function drawTextWithOutline(text, x, y, fontSize = 16, color = '#ffffff') {
+            ctx.font = `bold ${fontSize}px Mitr, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // ขอบสีดำ
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = Math.max(3, fontSize / 5);
+            ctx.strokeText(text, x, y);
+            
+            // สีด้านใน
+            ctx.fillStyle = color;
+            ctx.fillText(text, x, y);
+        }
+
+        function drawCircleImage(img, x, y, radius) {
+            if (!img) return;
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.clip(); // ครอบภาพให้เป็นวงกลม
+
+            const imgAspect = img.width / img.height;
+            let drawWidth, drawHeight;
+            if (imgAspect > 1) {
+                drawHeight = radius * 2;
+                drawWidth = drawHeight * imgAspect;
+            } else {
+                drawWidth = radius * 2;
+                drawHeight = drawWidth / imgAspect;
+            }
+
+            ctx.drawImage(img, x - drawWidth/2, y - drawHeight/2, drawWidth, drawHeight);
+            ctx.restore();
+            
+            // วาดขอบขาว
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#ffffff';
+            ctx.stroke();
+        }
+
+        function drawLoop() {
+            ctx.clearRect(0, 0, state.width, state.height);
+
+            // ถ้ากำลังเล่นเกม หรืออยู่หน้าสรุป ให้วาดกล่องและหิน
+            if (state.status === 'PLAYING' || state.status === 'LEVEL_TRANSITION') {
+                
+                // 1. วาด Target Zones (กล่อง)
+                state.targetZones.forEach(zone => {
+                    ctx.fillStyle = zone.isFilled ? 'rgba(16, 185, 129, 0.4)' : 'rgba(31, 41, 55, 0.7)';
+                    ctx.strokeStyle = zone.isFilled ? '#10b981' : '#4b5563';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.roundRect(zone.x, zone.y, zone.width, zone.height, 15);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // ข้อความในกล่อง
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = '16px Mitr, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    let lines = zone.label.split('\n');
+                    lines.forEach((line, index) => {
+                        let lineY = zone.y + (zone.height / 2) - ((lines.length - 1) * 10) + (index * 20);
+                        ctx.fillText(line, zone.x + zone.width / 2, lineY);
+                    });
+                });
+
+                // 2. วาด Items (หิน/แร่)
+                state.activeObjects.forEach(obj => {
+                    // วาดรูปภาพจาก Drive (ถ้าโหลดเสร็จแล้ว)
+                    let img = imageCache[obj.imgKey];
+                    if (img) {
+                        drawCircleImage(img, obj.x, obj.y, obj.radius);
+                    } else {
+                        // Fallback วงกลมสีเทา
+                        ctx.fillStyle = obj.isMatched ? '#10b981' : '#6b7280';
+                        ctx.beginPath();
+                        ctx.arc(obj.x, obj.y, obj.radius, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 3;
+                        ctx.stroke();
+                    }
+
+                    // วาดชื่อหินแบบมีขอบดำด้านนอกเพื่อให้อ่านง่าย
+                    drawTextWithOutline(obj.name, obj.x, obj.y + obj.radius + 20, 18, '#4ade80');
+                });
+            }
+
+            // 3. วาด Particles
+            updateParticles();
+            state.particles.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 5 + p.life * 5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1.0;
+
+            // 4. วาด Cursor มือ (ถ้า MediaPipe ส่งข้อมูลมา)
+            if (state.handLandmarks) {
+                // ต้อง Flip Canvas เฉพาะตอนวาดเส้นกระดูก เพื่อให้ตรงกับ Video ที่ Flip ไว้
+                ctx.save();
+                ctx.scale(-1, 1);
+                ctx.translate(-state.width, 0);
+
+                // วาดเส้นข้อต่อมือ
+                drawConnectors(ctx, state.handLandmarks, HAND_CONNECTIONS, {color: '#ffffff', lineWidth: 2});
+                drawLandmarks(ctx, state.handLandmarks, {color: '#14b8a6', lineWidth: 1, radius: 3});
+                
+                ctx.restore(); // กลับมาสเกลปกติ เพื่อวาดเป้าเล็งวงกลมให้ถูกต้อง
+
+                // วาดวงกลมไฮไลต์ที่ปลายนิ้วชี้ (Cursor)
+                ctx.beginPath();
+                ctx.arc(state.pointer.x, state.pointer.y, 12, 0, Math.PI * 2);
+                ctx.fillStyle = state.pointer.isGrabbing ? 'rgba(239, 68, 68, 0.8)' : 'rgba(20, 184, 166, 0.8)';
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            } else if (state.pointer.source !== 'hand') {
+                // ถ้าใช้เมาส์ ก็วาดวงกลมที่เมาส์
+                ctx.beginPath();
+                ctx.arc(state.pointer.x, state.pointer.y, 10, 0, Math.PI * 2);
+                ctx.fillStyle = state.pointer.isGrabbing ? 'rgba(239, 68, 68, 0.8)' : 'rgba(59, 130, 246, 0.8)';
+                ctx.fill();
+            }
+
+            requestAnimationFrame(drawLoop);
+        }
+
+        function onARResults(results) {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                state.handLandmarks = landmarks;
+                state.pointer.source = 'hand';
+
+                // นิ้วชี้ (Index Finger Tip - Landmark 8)
+                const indexTip = landmarks[8];
+                // แปลงพิกัด (สลับแกน X เพราะเรา Flip วิดีโอ)
+                state.pointer.x = (1 - indexTip.x) * state.width; 
+                state.pointer.y = indexTip.y * state.height;
+
+                // ตรวจจับการจีบนิ้ว (Pinch) ระหว่างนิ้วชี้(8) กับ นิ้วโป้ง(4)
+                const thumbTip = landmarks[4];
+                const thumbX = (1 - thumbTip.x) * state.width;
+                const thumbY = thumbTip.y * state.height;
+
+                let dx = state.pointer.x - thumbX;
+                let dy = state.pointer.y - thumbY;
+                let pinchDist = Math.sqrt(dx*dx + dy*dy);
+
+                // Hysteresis: ถ้าจับอยู่แล้ว ให้ระยะหลุดกว้างขึ้น (120px) ถ้ายังไม่จับ ต้องจีบใกล้ๆ (60px) ป้องกันการสั่นหลุด
+                const pinchThreshold = state.pointer.isGrabbing ? 120 : 60;
+                
+                state.pointer.isGrabbing = (pinchDist < pinchThreshold);
+                
+                handleInteraction();
+            } else {
+                state.handLandmarks = null;
+            }
+        }
+
+        async function initGame() {
+            // โหลดรูปภาพ
+            await preloadImages();
+
+            // ตั้งค่า MediaPipe Hands
+            const hands = new Hands({locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }});
+            hands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.6,
+                minTrackingConfidence: 0.5
+            });
+            hands.onResults(onARResults);
+
+            // ตั้งค่า Camera
+            const camera = new Camera(videoElement, {
+                onFrame: async () => {
+                    await hands.send({image: videoElement});
+                },
+                width: 1280,
+                height: 720
+            });
+            
+            camera.start().then(() => {
+                document.getElementById('loading-screen').classList.add('hidden');
+                document.getElementById('start-screen').classList.remove('hidden');
+            }).catch((err) => {
+                console.error("Camera error:", err);
+                document.getElementById('loading-text').innerText = "ไม่สามารถเปิดกล้องได้ กรุณาอนุญาตการเข้าถึงกล้อง หรือใช้เมาส์เล่นแทน";
+                // ให้เล่นต่อด้วยเมาส์ได้
+                setTimeout(() => {
+                    document.getElementById('loading-screen').classList.add('hidden');
+                    document.getElementById('start-screen').classList.remove('hidden');
+                }, 3000);
+            });
+
+            // เริ่ม Render Loop
+            drawLoop();
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            state.pointer.source = 'mouse';
+            state.pointer.x = e.clientX;
+            state.pointer.y = e.clientY;
+            state.pointer.isGrabbing = true;
+            handleInteraction();
+        });
+        canvas.addEventListener('mousemove', (e) => {
+            if (state.pointer.source === 'mouse') {
+                state.pointer.x = e.clientX;
+                state.pointer.y = e.clientY;
+                if (state.pointer.isGrabbing) handleInteraction();
+            }
+        });
+        window.addEventListener('mouseup', () => {
+            if (state.pointer.source === 'mouse') {
+                state.pointer.isGrabbing = false;
+                handleInteraction();
+            }
+        });
+        // รองรับ Touch Screen ด้วย
+        canvas.addEventListener('touchstart', (e) => {
+            state.pointer.source = 'touch';
+            state.pointer.x = e.touches[0].clientX;
+            state.pointer.y = e.touches[0].clientY;
+            state.pointer.isGrabbing = true;
+            handleInteraction();
+        }, {passive: false});
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault(); // ป้องกันหน้าจอเลื่อน
+            if (state.pointer.source === 'touch') {
+                state.pointer.x = e.touches[0].clientX;
+                state.pointer.y = e.touches[0].clientY;
+                if (state.pointer.isGrabbing) handleInteraction();
+            }
+        }, {passive: false});
+        window.addEventListener('touchend', () => {
+            if (state.pointer.source === 'touch') {
+                state.pointer.isGrabbing = false;
+                handleInteraction();
+            }
+        });
+
+        // เริ่มโหลดข้อมูลเกมทันทีที่หน้าเว็บเปิด
+        window.onload = () => {
+            initGame();
+        };
+    </script>
+</body>
+</html>
